@@ -1,10 +1,12 @@
-import cv2
+import sys
 import socket
 import time
 import requests
 import json
 import sounddevice as sd
 from vosk import Model, KaldiRecognizer
+import threading
+import queue
 
 # =============================
 # CONFIG
@@ -19,42 +21,188 @@ client.connect(("127.0.0.1", 5005))
 
 print("✅ Connected to JD Robot")
 
+
 def send(cmd):
     client.send((cmd + "\n").encode())
 
+
+# =============================
+# 🎭 EMOTION SYSTEM
+# =============================
+current_emotion = "neutral"
+
+
+def detect_emotion(text):
+    text = text.lower()
+
+    if any(word in text for word in ["good job", "great", "awesome", "nice"]):
+        return "happy"
+    elif any(word in text for word in ["bad", "useless", "stupid", "worst"]):
+        return "angry"
+    elif any(word in text for word in ["wow", "amazing", "exciting"]):
+        return "excited"
+    elif any(word in text for word in ["sad", "sorry", "unhappy"]):
+        return "sad"
+    return "neutral"
+
+
+def express_emotion(emotion):
+    global current_emotion
+    current_emotion = emotion
+
+    if emotion == "happy":
+        send("Servo(D1,60)")
+        time.sleep(0.3)
+        send("Servo(D1,120)")
+        time.sleep(0.3)
+
+    elif emotion == "angry":
+        for _ in range(2):
+            send("Servo(D1,70)")
+            time.sleep(0.2)
+            send("Servo(D1,110)")
+            time.sleep(0.2)
+
+    elif emotion == "excited":
+        for _ in range(3):
+            send("Servo(D0,70)")
+            time.sleep(0.2)
+            send("Servo(D0,110)")
+            time.sleep(0.2)
+
+    elif emotion == "sad":
+        send("Servo(D0,130)")
+        time.sleep(0.5)
+
+    else:
+        send("Servo(D0,90)")
+        send("Servo(D1,90)")
+
+
+# =============================
+# 🗣️ SPEAK WITH EMOTION
+# =============================
 def speak(text):
+    global current_emotion
+
     text = text.replace('"', "'")[:120]
+
+    if current_emotion == "happy":
+        delay = len(text) / 14
+    elif current_emotion == "excited":
+        delay = len(text) / 16
+    elif current_emotion == "sad":
+        delay = len(text) / 10
+    else:
+        delay = len(text) / 12
+
     send(f'SayEZB("{text}")')
     print("🤖:", text)
 
+    time.sleep(delay + 0.5)
+
+
 # =============================
-# SERVO CONTROL
+# SERVO + MOVEMENT
 # =============================
 def move_head_lr(pos):
     send(f"Servo(D1,{int(pos)})")
 
+
 def move_head_ud(pos):
     send(f"Servo(D0,{int(pos)})")
+
 
 def forward():
     send("Forward()")
 
+
 def stop():
     send("Stop()")
 
+
 # =============================
-# 🤖 BOW GESTURE
+# 🤖 BOW
 # =============================
 def bow():
-    print("🙇 Bowing...")
     move_head_ud(120)
     time.sleep(0.5)
     move_head_ud(60)
     time.sleep(0.5)
     move_head_ud(90)
 
+
 # =============================
-# LLM
+# ✍️ DRAW SHAPES
+# =============================
+def draw_shape(shape):
+    speak(f"I am drawing a {shape}")
+
+    send("ServoSpeed(D7, 3)")
+    send("ServoSpeed(D8, 3)")
+
+    send("Servo(D0, 130)")
+    send("Servo(D1, 90)")
+
+    send("Servo(D9, 150)")
+    time.sleep(3)
+
+    send("Servo(D7, 120)")
+    send("Servo(D8, 100)")
+    time.sleep(2)
+
+    if shape == "square":
+        for _ in range(4):
+            forward()
+            time.sleep(2)
+            stop()
+            send("Right()")
+            time.sleep(1.5)
+            stop()
+
+    elif shape == "rectangle":
+        for _ in range(2):
+            forward()
+            time.sleep(3)
+            stop()
+            send("Right()")
+            time.sleep(1.5)
+            stop()
+
+            forward()
+            time.sleep(1.5)
+            stop()
+            send("Right()")
+            time.sleep(1.5)
+            stop()
+
+    elif shape == "triangle":
+        for _ in range(3):
+            forward()
+            time.sleep(2)
+            stop()
+            send("Right()")
+            time.sleep(2)
+            stop()
+
+    else:  # house
+        for _ in range(4):
+            forward()
+            time.sleep(2)
+            stop()
+            send("Right()")
+            time.sleep(1.5)
+            stop()
+
+    send("Servo(D7, 90)")
+    send("Servo(D0, 90)")
+    send("Servo(D9, 90)")
+
+    speak(f"Finished drawing {shape}")
+
+
+# =============================
+# 🤖 LLM
 # =============================
 def ask_llm(prompt):
     try:
@@ -71,145 +219,128 @@ def ask_llm(prompt):
     except:
         return "Brain not responding"
 
+
 # =============================
-# 🎤 VOSK MIC (5 SEC LISTEN)
+# 🎤 INPUT SYSTEM
 # =============================
 model = Model(r"D:\JD\model\vosk-model-small-en-us-0.15\vosk-model-small-en-us-0.15")
 recognizer = KaldiRecognizer(model, 16000)
 
-def listen_5sec():
-    print("🎤 Listening for 5 seconds...")
+input_queue = queue.Queue()
+
+
+def keyboard_listener():
+    while True:
+        try:
+            text = sys.stdin.readline().strip()
+            if text:
+                input_queue.put(text)
+        except:
+            break
+
+
+threading.Thread(target=keyboard_listener, daemon=True).start()
+
+
+def listen_or_keyboard(duration=5):
+    print(f"🎤 Listening {duration}s...")
 
     text_result = ""
+    keyboard_result = None
 
     def callback(indata, frames, time_info, status):
         nonlocal text_result
-
         if recognizer.AcceptWaveform(bytes(indata)):
             result = json.loads(recognizer.Result())
             text = result.get("text", "").strip()
-
             if text:
                 text_result += " " + text
 
     with sd.RawInputStream(
-        samplerate=16000,
-        blocksize=8000,
-        dtype='int16',
-        channels=1,
-        callback=callback
+            samplerate=16000,
+            blocksize=8000,
+            dtype='int16',
+            channels=1,
+            callback=callback
     ):
-        time.sleep(5)   # 🔥 ONLY 5 SECONDS
+        start = time.time()
+        while time.time() - start < duration:
+            try:
+                keyboard_result = input_queue.get_nowait()
+                break
+            except queue.Empty:
+                time.sleep(0.1)
 
-    text_result = text_result.strip()
-    print("🗣️ Final Mic Input:", text_result)
+    return keyboard_result if keyboard_result else text_result.strip()
 
-    return text_result
-
-# =============================
-# CAMERA
-# =============================
-cap = cv2.VideoCapture(0)
-
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
 
 # =============================
-# VARIABLES
+# 🚀 START
 # =============================
-servo_lr = 90
-servo_ud = 90
-smooth = 0.2
-last_talk = 0
-cooldown = 6
-
 print("🚀 JD AI STARTED")
 
-# =============================
-# 🔥 START SEQUENCE
-# =============================
 bow()
-speak("Hello I am JD Robot from D I T University and your personal assistant")
+speak("Hello I am JD Robot from Centre of Excellence Robotics Lab DIT University")
 
 # =============================
 # MAIN LOOP
 # =============================
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        continue
+try:
+    while True:
+        speak("Listening")
+        user = listen_or_keyboard(5)
 
-    h, w = frame.shape[:2]
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if not user:
+            speak("No input detected")
+            continue
 
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        print("💬:", user)
+        u = user.lower()
 
-    if len(faces) > 0:
-        (x, y, fw, fh) = faces[0]
-
-        cx = x + fw // 2
-        cy = y + fh // 2
-
-        cv2.rectangle(frame, (x,y), (x+fw,y+fh), (0,255,0), 2)
+        # 🎭 Emotion
+        emotion = detect_emotion(user)
+        express_emotion(emotion)
 
         # =============================
-        # HEAD TRACKING
+        # 🎤 CUSTOM COMMANDS
         # =============================
-        target_lr = 40 + (cx / w) * 100
-        target_ud = 40 + (cy / h) * 100
+        if "introduce innovators" in u:
+            speak("We are Abeer, Pushpendra, and Pankaj")
 
-        servo_lr = smooth * target_lr + (1 - smooth) * servo_lr
-        servo_ud = smooth * target_ud + (1 - smooth) * servo_ud
+        elif "introduce yourself" in u:
+            speak("I am JD Bare Robot from DIT University")
 
-        move_head_lr(servo_lr)
-        move_head_ud(servo_ud)
+        elif "introduce faculty" in u:
+            speak("our Doctor Himani Sharma is Assistant Professor at DIT University")
 
-        # FOLLOW
-        if fw < 80:
-            forward()
-        elif fw > 150:
-            stop()
+        elif "dean" in u:
+            speak("our Doctor Debopam Acharya is Professor and Dean of School of Computing at DIT University")
 
         # =============================
-        # AI INTERACTION
+        # 🎨 DRAW
         # =============================
-        if fw > 150 and time.time() - last_talk > cooldown:
+        elif "draw square" in u:
+            draw_shape("square")
 
-            speak("Listening")
+        elif "draw rectangle" in u:
+            draw_shape("rectangle")
 
-            user = listen_5sec()
+        elif "draw triangle" in u:
+            draw_shape("triangle")
 
-            # fallback
-            if not user:
-                user = input("⌨️ Type: ")
+        elif "draw house" in u:
+            draw_shape("house")
 
-            if user:
-                print("💬 Final Input:", user)
+        # =============================
+        # 🤖 AI RESPONSE
+        # =============================
+        else:
+            reply = ask_llm(user)
+            speak(reply)
 
-                if user.lower() in ["exit", "stop"]:
-                    speak("Stopping system")
-                    break
+        time.sleep(1)
 
-                reply = ask_llm(user)
-                speak(reply)
+except KeyboardInterrupt:
+    print("Stopped manually")
 
-            else:
-                speak("No input detected")
-
-            last_talk = time.time()
-
-    else:
-        stop()
-
-    cv2.imshow("JD ROBOT", frame)
-
-    if cv2.waitKey(1) == 27:
-        break
-
-# =============================
-# CLEANUP
-# =============================
-cap.release()
-cv2.destroyAllWindows()
 client.close()
