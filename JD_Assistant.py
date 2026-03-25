@@ -10,6 +10,7 @@ import sounddevice as sd
 from vosk import Model, KaldiRecognizer
 import threading
 import queue
+from datetime import datetime
 
 # =============================
 # CONFIG
@@ -124,6 +125,32 @@ def backward():
 def stop():
     print("⏹️ Stopping")
     send("Stop()")
+
+def tell_time():
+    now = datetime.now()
+    current_time = now.strftime("%I:%M %p")
+    speak(f"The current time is {current_time}")
+
+def get_weather():
+    api_key = "220212f22c164c70921191547251709"
+    city = "Dehradun"
+    url = f"http://api.weatherapi.com/v1/current.json?key={api_key}&q={city}&aqi=no"
+
+    try:
+        res = requests.get(url)
+        data = res.json()
+
+        if "current" in data:
+            temp = data["current"]["temp_c"]
+            condition = data["current"]["condition"]["text"]
+            speak(f"The current temperature in Dehradun is {temp} degree Celsius")
+            speak(f"The weather is {condition}")
+        else:
+            speak("Weather API error")
+
+    except Exception as e:
+        print(f"Weather error: {e}")
+        speak("Unable to fetch weather data")
 # =============================
 # 🤖 LLM
 # =============================
@@ -244,6 +271,18 @@ try:
         # =============================
         if "introduce us" in u or "introduce team" in u:
           speak("We are Abeer, Pushpendra, Pankaj, and Doctor Himani Sharma, and I am JD Robot, your intelligent robotic assistant")
+
+        elif "time" in u:
+            tell_time()
+
+        elif "temperature" in u or "weather" in u:
+            get_weather()
+            try:
+                happy()
+            except:
+                print("⚠️ FAILED")
+                time.sleep(0.3)
+
 
         elif "introduce yourself" in u:
             speak("I am JD Bare Robot from D I T University")
