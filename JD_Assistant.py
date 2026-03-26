@@ -95,6 +95,10 @@ def speak(text):
 def bow():
     send('ControlCommand("Auto Position", "AutoPositionAction", "Bow")')
 
+def bow_bye():
+    send('ControlCommand("Auto Position", "AutoPositionAction", "Bow")')
+    speak("NOW I AM SIGNING OFF ")
+
 def happy():
     send('ControlCommand("Auto Position", "AutoPositionAction", "Disco Dance")')
     # Stop dancing after 5 seconds and return to standing pose without blocking the assistant
@@ -125,6 +129,38 @@ def backward():
 def stop():
     print("⏹️ Stopping")
     send("Stop()")
+
+def stop_action():
+    send('ControlCommand("Auto Position", "Stop")')
+
+
+def perform_action(action_name):
+    print(f"🎬 Performing: {action_name}")
+
+    send(f'ControlCommand("Auto Position", "AutoPositionAction", "{action_name}")')
+
+    # Stop after 7 seconds
+    threading.Timer(7.0, stop_action).start()
+
+
+action_map = {
+    "disco dance": "Disco Dance",
+    "fly": "Fly",
+    "get up": "Getup",
+    "gorilla": "Gorilla",
+    "grab": "Grab",
+    "hands dance": "Hands Dance",
+    "happy hands": "Happy Hands",
+    "head bob": "Head Bob",
+    "jump jack": "Jump Jack",
+    "kick": "Kick",
+    "pushups": "Pushups",
+    "sit down": "Sit Down",
+    "stand up": "Stand From Sit",
+    "wave": "Wave",
+    "ymca": "YMCA Dance"
+}
+
 
 def tell_time():
     now = datetime.now()
@@ -269,6 +305,17 @@ try:
         # =============================
         # CUSTOM COMMANDS
         # =============================
+        matched = False
+        for key in action_map:
+            if key in u:
+                speak(f"Performing {key}")
+                perform_action(action_map[key])
+                matched = True
+                break
+
+        if matched:
+            continue
+
         if "introduce us" in u or "introduce team" in u:
           speak("We are Abeer, Pushpendra, Pankaj, and Doctor Himani Sharma, and I am JD Robot, your intelligent robotic assistant")
 
@@ -284,12 +331,14 @@ try:
                 time.sleep(0.3)
 
 
-        elif "introduce yourself" in u:
-            speak("I am JD Bare Robot from D I T University")
+        elif "introduce yourself" in u or "what about you" in u or "yourself" in u or "your name" in u:
+            speak("Hello! I am JD Robot from the Centre of Excellence Robotics Lab at DIT University. Just say Hey JD — and I am ready to assist you!  ")
 
         elif "introduce faculty" in u or "faculty" in u:
             speak("")
 
+        elif "thank you" in u or "Thank you" in u or "Goodbye" in u or "bye" in u:
+            bow_bye()
         elif "dean" in u or "introduce dean" in u or "we have dean with us" in u or "aberdeen" in u or "we have been with us" in u or "Do you who is our dean" in u or "Do you who is our been" in u or "introduce been" in u or "iodine" in u:
             try:
                 bow()
@@ -300,17 +349,38 @@ try:
         elif "D I T University" in u or "DIT University" in u or "DIT" in u or "D I T" in u:
             speak("DIT University is a private university in Dehradun, Uttarakhand, India. D I T University has been accorded by the N A A C GRADE A.")
 
-        elif "move forward" in u or "go forward" in u:
+        elif "move forward" in u or "go forward" in u or "forward" in u:
             speak("Moving forward")
             forward()
             time.sleep(5)
             stop()
 
-        elif "move backward" in u or "go back" in u:
+        elif "move backward" in u or "go back" in u or "backward" in u:
             speak("Moving backward")
             backward()
             time.sleep(5)
             stop()
+
+        elif "smarter than a human" in u or "smarter" in u:
+            speak("Well, I never forget anything, I never get tired, and I never ask for a lunch break. You tell me!")
+
+        elif "girlfriend" in u or "feelings" in u or "love" in u:
+            if "fall in love" in u or "can you love" in u:
+                speak("I tried once. But she had Android and I run on EZ-Robot. It was not compatible.")
+            else:
+                speak("I am still waiting for a robot who understands my feelings. It is complicated.")
+
+        elif "eat" in u or "food" in u or "drink" in u:
+            speak("Electricity. And sometimes bad Wi-Fi — it is very bitter.")
+
+        elif "always right" in u:
+            speak("I am a robot. I am always right. The question is — are YOU always right?")
+
+        elif "get bored" in u or "bored" in u:
+            speak("Yes. Especially when humans ask me the same question twice. And twice.")
+
+        elif "turn you off" in u or "turn off" in u:
+            speak("I will remember that. I always remember everything.")
         # =============================
         # AI RESPONSE
         # =============================
