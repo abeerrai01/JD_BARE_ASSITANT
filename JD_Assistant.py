@@ -349,10 +349,10 @@ try:
         elif "D I T University" in u or "DIT University" in u or "DIT" in u or "D I T" in u:
             speak("DIT University is a private university in Dehradun, Uttarakhand, India. D I T University has been accorded by the N A A C GRADE A.")
 
-        elif "move forward" in u or "go forward" in u or "forward" in u:
-            speak("Moving forward")
+        elif "move" in u or "move forward" in u or "walk" in u:
+            speak("Moving")
             forward()
-            time.sleep(5)
+            time.sleep(7)
             stop()
 
         elif "move backward" in u or "go back" in u or "backward" in u:
